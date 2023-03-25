@@ -13,10 +13,19 @@ const openai = new OpenAIApi(configuration);
 
 // Initialize Express server
 const app = express();
-app.use(express.json());
+
+// Let any other request time out, we don't care
+app.get('/*', () => {
+});
+app.put('/*', () => {
+});
+app.delete('/*', () => {
+});
 
 app.post('/fillSummary/:cardId', authenticate, async (req, res) => {
     const cardId = req.params.cardId;
+    console.info(`Handling summary for card ${cardId}`);
+
     try {
 
         const card = await getCardById(cardId);
@@ -29,15 +38,17 @@ app.post('/fillSummary/:cardId', authenticate, async (req, res) => {
         }
 
         const prompt = dedent(`
-        Summarize the issue in this Trello card as a less than a 20-word meeting writeup without new lines.
-        Comments start with the time in '[]', then the name of the user and the message after ':'
+        Summarize only the issue in this Trello card as a less than a 20-word meeting writeup without new lines.
         You will now get the title, description and each comment on the card.
+        Comments start with the time in '[]', then the name of the user and the message after ':'
         --- 
         Title: ${card.name}
         ---
         Description: ${card.desc}
         ---
         Comments: ${formattedComments}
+        ---
+        Data over, now write your summary of the card:
         `);
 
         const completion = await openai.createCompletion({
@@ -51,15 +62,12 @@ app.post('/fillSummary/:cardId', authenticate, async (req, res) => {
         text = text.replaceAll('\n', ' ').trim();
 
         const response = await updateCustomField(cardId, text);
+        console.log(text);
 
         res.status(200).json({result: text});
     } catch (e) {
         res.status(500).json({result: e.message || e});
     }
-});
-
-app.listen(process.env.port || 12345, () => {
-    console.log('Butler server listening...');
 });
 
 async function getCardById(cardId) {
@@ -98,3 +106,7 @@ function authenticate(req, res, next) {
         return res.status(401).json({error: 'Invalid token'});
     }
 }
+
+app.listen(process.env.port || 12345, () => {
+    console.log('Butler server listening...');
+});
